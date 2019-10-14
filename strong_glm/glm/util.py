@@ -4,22 +4,28 @@ import torch
 from torch.distributions.utils import broadcast_all
 
 from skorch.helper import SliceDict
-from skorch.utils import to_tensor as _to_tensor_base
+from skorch.utils import to_tensor as _to_tensor_base, is_pandas_ndframe
 
 
 def to_tensor(X: Union[torch.Tensor, SliceDict],
               device: Union[torch.device, str],
               dtype: Optional[torch.dtype] = None) -> Union[torch.Tensor, SliceDict]:
-    # TODO: if pandas, X = X.values
-    tensor_or_dict = _to_tensor_base(X=X, device=device)
-    if dtype is None:
-        return tensor_or_dict
-    if isinstance(tensor_or_dict, dict):
-        return SliceDict(**{k: v.to(dtype) for k, v in tensor_or_dict.items()})
-    if isinstance(tensor_or_dict, torch.Tensor):
-        return tensor_or_dict.to(dtype)
+    """
+    Behaves slightly differently than skorch's to_tensor: (a) DataFrames simply get their `values` extracted, (b)
+    supports dtype conversion.
+    """
+    if isinstance(X, dict):
+        return SliceDict(**{k: to_tensor(v, device=device, dtype=dtype) for k, v in X.items()})
+    elif isinstance(X, (list, tuple)):
+        return type(X)(to_tensor(v, device=device, dtype=dtype) for v in X)
     else:
-        raise NotImplementedError
+        if is_pandas_ndframe(X):
+            X = X.values
+        tensor = _to_tensor_base(X=X, device=device)
+
+    if dtype is not None:
+        tensor = tensor.to(dtype)
+    return tensor
 
 
 class SimpleLinear(torch.nn.Linear):
