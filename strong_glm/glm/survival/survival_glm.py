@@ -6,8 +6,7 @@ from torch.distributions import Distribution
 from torch.optim.lbfgs import LBFGS
 
 from strong_glm.glm.base import Glm
-from strong_glm.glm.survival.censoring import CensScaler
-from strong_glm.glm.survival.kaplan_meier import km_summary
+from strong_glm.glm.survival.censoring import CensScaler, km_summary
 from strong_glm.glm.survival.loss import CensNegLogProbLoss
 from strong_glm.glm.util import to_tensor
 
@@ -54,6 +53,11 @@ class SurvivalGlm(Glm):
             y = self.y_scaler_.transform(y)
 
         return super().partial_fit(X=X, y=y, **fit_params)
+
+    def predict(self, X: Union[torch.Tensor, 'SliceDict'], type: str = 'mean', *args, **kwargs) -> 'ndarray':
+        if self.verbose and self.scale_y:
+            print("Reminder: Model was fit w/scale_y=True, so predictions are after scaling. See `model.y_scaler_`")
+        return super().predict(X=X, type=type, *args, **kwargs)
 
     def km_summary(self,
                    dataframe: 'DataFrame',

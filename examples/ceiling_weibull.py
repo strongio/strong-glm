@@ -139,6 +139,21 @@ print(
     scale_x_continuous(name="Time") +
     theme(legend_position=(.7,.7), figure_size=(6,5))
 )
+
+# +
+from strong_glm.glm.survival.censoring import cens_y_to_indicator
+
+data['pred_60'] = model_ceiling.predict(preproc.transform(data), type='cdf', value=60/model_ceiling.y_scaler_.mean_.item())
+data['actual_60'] = cens_y_to_indicator(time=data['tte'], is_upper_cens=data['censored'], window=60)
+
+print(
+    ggplot(data, aes(x='pred_60', y='actual_60')) + 
+    stat_summary_bin(fun_data='mean_cl_boot') +
+    geom_hline(yintercept=(0,1)) +
+    theme_bw() + geom_abline(linetype='dashed') +
+    scale_x_continuous(name="Actual (horizon=60)", labels=formatters.percent, limits=(0,1)) +
+    scale_y_continuous(name="Predicted (horizon=60)", labels=formatters.percent) 
+)
 # -
 
 # #### Visualize Predictors

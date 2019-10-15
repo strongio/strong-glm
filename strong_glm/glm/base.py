@@ -2,9 +2,14 @@ from typing import Type, Optional, Sequence, Callable, Union, Dict
 from warnings import warn
 
 import torch
+import numpy as np
+from sklearn.compose import ColumnTransformer
+
 from skorch import NeuralNet
 from skorch.callbacks import Callback, EarlyStopping
 from skorch.dataset import CVSplit
+from skorch.helper import SliceDict
+from skorch.utils import to_numpy
 from torch.distributions import Distribution, constraints
 from torch.optim.lbfgs import LBFGS
 
@@ -60,9 +65,37 @@ class Glm(NeuralNet):
     def module_dtype(self) -> torch.dtype:
         return next(self.module_.parameters()).dtype
 
-    def infer(self, x, **fit_params):
+    def infer(self, x: Union[torch.Tensor, SliceDict], **fit_params):
         x = to_tensor(x, device=self.device, dtype=self.module_dtype)
         return super().infer(x=x, **fit_params)
+
+    def predict(self, X: Union[torch.Tensor, SliceDict], type: str = 'mean', *args, **kwargs) -> np.ndarray:
+        """
+        Return an attribute of the distribution (by default the mean) as a numpy array.
+        """
+        y_out = []
+        for params in self.forward_iter(X, training=False):
+            batch_size = len(params[0])
+            distribution_kwargs = dict(zip(self.distribution_param_names_, params))
+            dist = self.distribution(**distribution_kwargs)
+            yp = getattr(dist, type)
+            if callable(yp):
+                yp = yp(*args, **kwargs)
+            yp = to_numpy(yp)
+            if yp.shape[0] != batch_size:
+                raise RuntimeError(
+                    f"`{self.distribution.__name__}.{type}` produced a tensor whose leading dim is {yp.shape[0]}, "
+                    f"expected {batch_size}."
+                )
+            y_out.append(yp)
+        y_out = np.concatenate(y_out, 0)
+        return y_out
+
+    def predict_proba(self, X: Union[torch.Tensor, SliceDict]):
+        """
+        Return the predicted probabilities, if applicable for this distribution (e.g. Binomial, Categorical).
+        """
+        return self.predict(X=X, type='probs')
 
     def get_loss(self,
                  y_pred: torch.Tensor,
@@ -82,6 +115,8 @@ class Glm(NeuralNet):
         # infer number of input features if appropriate:
         if self.module_input_feature_names_ is None:
             self.module_input_feature_names_ = self._infer_input_feature_names(X, input_feature_names)
+
+        # TODO: if dataframe, X.values
 
         return super().fit(X=X, y=y, **fit_params)
 
@@ -209,3 +244,24 @@ _constraint_to_ilink = {
     constraints.real: identity
 }
 
+# def laplace_params(self, y_pred, y_true, input_features=None):
+#     input_features = input_features or self.input_features_
+#     means = None  # TODO
+#     if len(means) != len(input_features):
+#         warn("TODO: coherent warning")
+#         feature_names = ["x{}".format(i) for i in range(len(means))]
+#
+#     # get hessian:
+#     loss = self.get_loss(y_pred, y_true)
+#     hess = hessian(output=loss, inputs=list(self.module_.parameters()), allow_unused=True, progress=False)
+#
+#     # create mvnorm for laplace approx:
+#     try:
+#         self._param_estimates = torch.distributions.MultivariateNormal(means, torch.inverse(hess))
+#     except RuntimeError as e:
+#         if 'Lapack' in e.args[0]:
+#             warn(f"Hessian was not invertible, model may not have converged. Returning ~0 cov. Hessian:\n{hess}")
+#             cov = torch.eye(hess.shape[0]) * 10e-8
+#             self._param_estimates = torch.distributions.MultivariateNormal(means, cov)
+#         else:
+#             raise e
