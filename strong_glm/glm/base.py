@@ -97,6 +97,45 @@ class Glm(NeuralNet):
         """
         return self.predict(X=X, type='probs')
 
+    def predict_dataframe(self,
+                          dataframe: 'DataFrame',
+                          preprocessor: Union[ColumnTransformer, Sequence],
+                          type: str,
+                          x: torch.Tensor):
+        """
+        Experimental.
+        """
+        from pandas import DataFrame
+
+        # check x, broadcast:
+        x = to_tensor(x, device=self.device, dtype=self.module_dtype)
+        if len(x.shape) == 2:
+            assert x.shape[1] == 1
+        elif len(x.shape) == 1:
+            x = x[:, None]
+        else:
+            raise RuntimeError("Expected `x` to be 1D")
+
+        # generate dist-param predictions:
+        assert len(dataframe.index) == len(set(dataframe.index))
+        with torch.no_grad():
+            X = to_tensor(preprocessor.transform(dataframe), device=self.device, dtype=self.module_dtype)
+            params = self.infer(X)
+            distribution_kwargs = dict(zip(self.distribution_param_names_, params))
+            dist = self.distribution(**distribution_kwargs)
+
+            # plug x into method:
+            pred_broadcasted = getattr(dist, type)(x)
+
+        # flatten, joinable along original index:
+        index_broadcasted = to_tensor(dataframe.index.values, device=self.device)[None, :].repeat(len(x), 1)
+        x_broadcasted = x.repeat(1, len(dataframe.index))
+        return DataFrame({
+            'index': index_broadcasted.view(-1).numpy(),
+            'x': x_broadcasted.view(-1).numpy(),
+            type: pred_broadcasted.view(-1).numpy()
+        })
+
     def get_loss(self,
                  y_pred: torch.Tensor,
                  y_true: torch.Tensor,

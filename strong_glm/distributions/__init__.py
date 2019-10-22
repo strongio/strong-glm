@@ -1,5 +1,2 @@
-from typing import Type, Sequence
-
-from torch.distributions import Distribution
-
-from .ceiling_weibull import CeilingWeibull
+from strong_glm.distributions.ceiling import CeilingWeibull, CeilingLogNormal
+from strong_glm.distributions.piecewise import piecewise_distribution
