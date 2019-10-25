@@ -8,7 +8,7 @@ from torch.optim.lbfgs import LBFGS
 from strong_glm.glm.base import Glm
 from strong_glm.glm.survival.censoring import CensScaler, km_summary
 from strong_glm.glm.survival.loss import CensNegLogProbLoss
-from strong_glm.glm.util import to_tensor
+from strong_glm.glm.utils import to_tensor
 
 
 class SurvivalGlm(Glm):

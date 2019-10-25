@@ -1,31 +1,9 @@
-from typing import Sequence, Dict, Callable, Optional, Type, Tuple, Union
+from typing import Sequence, Dict, Callable, Optional, Type, Tuple
 
 import torch
 from torch.distributions.utils import broadcast_all
 
 from skorch.helper import SliceDict
-from skorch.utils import to_tensor as _to_tensor_base, is_pandas_ndframe
-
-
-def to_tensor(X: Union[torch.Tensor, SliceDict],
-              device: Union[torch.device, str],
-              dtype: Optional[torch.dtype] = None) -> Union[torch.Tensor, SliceDict]:
-    """
-    Behaves slightly differently than skorch's to_tensor: (a) DataFrames simply get their `values` extracted, (b)
-    supports dtype conversion.
-    """
-    if isinstance(X, dict):
-        return SliceDict(**{k: to_tensor(v, device=device, dtype=dtype) for k, v in X.items()})
-    elif isinstance(X, (list, tuple)):
-        return type(X)(to_tensor(v, device=device, dtype=dtype) for v in X)
-    else:
-        if is_pandas_ndframe(X):
-            X = X.values
-        tensor = _to_tensor_base(X=X, device=device)
-
-    if dtype is not None:
-        tensor = tensor.to(dtype)
-    return tensor
 
 
 class SimpleLinear(torch.nn.Linear):
@@ -48,8 +26,8 @@ class SimpleLinear(torch.nn.Linear):
 
 class MultiOutputModule(torch.nn.ModuleDict):
     """
-    Wrapper around torch.nn.Modules to help generated named predictions. This generally used by `SurvivalModel` for
-    predicting the params of a probability distribution.
+    Wrapper around torch.nn.Modules to help generated named predictions. This generally used by `Glm` for predicting the
+     params of a probability distribution.
 
     Example:
 
@@ -59,6 +37,10 @@ class MultiOutputModule(torch.nn.ModuleDict):
     )
     ```
     """
+
+    @classmethod
+    def is_default_submodule(cls, sub_module_cls: Optional[Type[torch.nn.Module]]) -> bool:
+        return issubclass(sub_module_cls or SimpleLinear, SimpleLinear)
 
     def __init__(self,
                  names: Sequence[str],
@@ -123,6 +105,7 @@ class MultiOutputModule(torch.nn.ModuleDict):
     @staticmethod
     def _validate_pred_shape(x: torch.Tensor, nm: str):
         if len(x.shape) == 2:
+            # TODO: is this nonstandard?
             x = x.squeeze(-1)
         if len(x.shape) > 1:
             raise RuntimeError(f"The output for `{nm}` has invalid shape {x.shape}, expected 1D.")

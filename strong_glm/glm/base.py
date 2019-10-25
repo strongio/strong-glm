@@ -13,7 +13,7 @@ from skorch.utils import to_numpy
 from torch.distributions import Distribution, constraints
 from torch.optim.lbfgs import LBFGS
 
-from strong_glm.glm.util import MultiOutputModule, SimpleLinear, to_tensor
+from strong_glm.glm.utils import MultiOutputModule, to_tensor
 from strong_glm.log_prob_criterion import NegLogProbLoss
 
 
@@ -242,7 +242,7 @@ class Glm(NeuralNet):
                     raise RuntimeError("Must supply distribution_param_names, unable to infer.") from e
 
         # if using default sub-module, can automatically set `in_features` keyword-arg:
-        if issubclass(self.module or SimpleLinear, SimpleLinear):
+        if MultiOutputModule.is_default_submodule(self.module):
             if isinstance(self.module_input_feature_names_, dict):
                 kwargs.update(
                     {f'{k}__in_features': len(self.module_input_feature_names_.get(k, [])) for k in kwargs['names']}
