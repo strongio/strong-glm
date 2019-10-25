@@ -13,7 +13,8 @@ from skorch.utils import to_numpy
 from torch.distributions import Distribution, constraints
 from torch.optim.lbfgs import LBFGS
 
-from strong_glm.glm.utils import MultiOutputModule, to_tensor
+from strong_glm.utils import to_tensor
+from strong_glm.glm.utils import MultiOutputModule
 from strong_glm.log_prob_criterion import NegLogProbLoss
 
 
