@@ -40,7 +40,7 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
         neg_log_probs = -self.distribution(*y_pred).log_prob(y_true)
-        return self._reductions[self.reduction](neg_log_probs)
+        return _reductions[self.reduction](neg_log_probs)
 
     def get_penalty(self, y_true: torch.Tensor, **kwargs):
         assert isinstance(y_true, (torch.Tensor, SliceDict))
