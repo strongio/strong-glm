@@ -158,8 +158,6 @@ class Glm(NeuralNet):
         if self.module_input_feature_names_ is None:
             self.module_input_feature_names_ = self._infer_input_feature_names(X, input_feature_names)
 
-        # TODO: if dataframe, X.values
-
         return super().fit(X=X, y=y, **fit_params)
 
     def partial_fit(self, X, y=None, classes=None, input_feature_names: Optional[Sequence[str]] = None, **fit_params):

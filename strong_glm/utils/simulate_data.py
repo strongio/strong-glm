@@ -23,7 +23,7 @@ def simulate_data(num_rows: int, linear_pred_betas: np.ndarray, binary_pred_beta
     num_preds = len(linear_pred_betas) + len(binary_pred_betas)
 
     def label(x):
-        return 'x_{}'.format(str(x).rjust(num_preds, "0"))
+        return 'x{}'.format(str(x).rjust(len(str(num_preds)), "0"))
 
     X = random_multivariate_normal(num_rows, num_preds)
     df = DataFrame(index=range(num_rows))
