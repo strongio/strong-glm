@@ -40,10 +40,12 @@ class Glm(NeuralNet):
         :param kwargs: Further keyword arguments that will be passed to skorch.NeuralNet
         """
 
+        if 'criterion' not in kwargs:
+            kwargs['criterion'] = self.criterion_cls
+
         super().__init__(
             lr=lr,
             module=module,
-            criterion=self.criterion_cls,
             optimizer=optimizer,
             max_epochs=max_epochs,
             batch_size=batch_size,
@@ -148,7 +150,7 @@ class Glm(NeuralNet):
     @property
     def _default_callbacks(self):
         sup = list(super()._default_callbacks)
-        return sup + [EarlyStopping(monitor='train_loss', threshold=1e-6)]
+        return sup + [('early_stopping', EarlyStopping(monitor='train_loss', threshold=1e-6))]
 
     def fit(self, X, y=None, input_feature_names: Optional[Sequence[str]] = None, **fit_params):
         # infer number of input features if appropriate:
