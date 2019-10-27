@@ -1,11 +1,10 @@
-from typing import Sequence, Type, Optional, Callable
+from typing import Sequence, Type
 
 import torch
 from skorch.helper import SliceDict
 from torch.distributions import Distribution
 
-from strong_glm.penalty.base import Penalty
-from strong_glm.penalty.penalties import NoPenalty, L2
+from strong_glm.penalty import L2, SmoothL1
 
 _reductions = {
     'mean': torch.mean,
@@ -17,32 +16,43 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
     """
     Given a torch.distribution type, give the negative log-loss from a network that outputs predicted parameters.
     """
+    _penalty_aliases = {
+        'l2': L2,
+        'smooth_l1': SmoothL1,
+        'huber': SmoothL1
+    }
 
     def __init__(self,
                  param_names: Sequence[str],
                  distribution: Type[Distribution],
                  reduction: str = 'mean',
-                 penalty: Optional[float] = None):
+                 penalty: float = 0.0,
+                 penalty_type: str = 'l2'):
         super().__init__(reduction=reduction)
         self.param_names = param_names
         self.distribution = distribution
 
-        if penalty is None:
-            self.penalty = NoPenalty()
-        elif isinstance(penalty, float):
-            self.penalty = L2(multi=penalty)
-        elif isinstance(penalty, (Penalty, Callable)):
-            self.penalty = penalty
+        if isinstance(penalty_type, str):
+            penalty_type = self._penalty_aliases[penalty_type]
+        if isinstance(penalty, float):
+            self.penalty = penalty_type(penalty)
+        elif isinstance(penalty, tuple):
+            self.penalty = penalty_type(*penalty)
         elif isinstance(penalty, dict):
-            raise NotImplementedError("TODO: different penalty for each `param_names`")
+            self.penalty = penalty_type(**penalty)
         else:
-            raise ValueError(f"Expected `penalty` to be a float for L2-penalty or a `Penalty` instance. Got: {penalty}")
+            raise ValueError(f"Expected `penalty` to be something that can be passed to `{penalty_type.__name__}`")
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
         neg_log_probs = -self.distribution(*y_pred).log_prob(y_true)
         return _reductions[self.reduction](neg_log_probs)
 
     def get_penalty(self, y_true: torch.Tensor, **kwargs):
+        """
+        :param y_true: The observed target.
+        :param kwargs: The parameters, retrieved via `dict(module.named_parameters())`
+        :return: The penalty
+        """
         assert isinstance(y_true, (torch.Tensor, SliceDict))
         penalty = self.penalty(**kwargs)
         if self.reduction == 'mean':

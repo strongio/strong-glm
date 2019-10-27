@@ -25,8 +25,8 @@ import pandas as pd
 from plotnine import *
 from mizani import formatters
 
-torch.manual_seed(2019-10-25)
-np.random.seed(2019-10-25)
+torch.manual_seed(2019-10-26)
+np.random.seed(2019-10-26)
 # -
 
 # ## Simulate Data
