@@ -162,4 +162,24 @@ print(
     scale_x_continuous(name="Time") +
     theme(legend_position=(.7,.7), figure_size=(6,5))
 )
+# -
+
+# ### Visualize Coefficients + Uncertainty
+
+# +
+model_ceiling.estimate_laplace_params(X=preproc.transform(data), y=data.loc[:,['tte','censored']].values)
+
+print(
+    ggplot(model_ceiling.summarize_laplace_params(), 
+           aes(x='feature', y='estimate')) +
+    geom_pointrange(aes(ymin='estimate - 1.96 * std', ymax='estimate + 1.96 * std')) +
+    facet_wrap("~dist_param") +
+    geom_hline(yintercept=0) +
+    theme_bw() + 
+    theme(figure_size=(10,5)) +
+    scale_y_continuous(name="Model-Estimate (on transformed scale)") +
+    scale_x_discrete(name="Feature")
+)
+# -
+
 

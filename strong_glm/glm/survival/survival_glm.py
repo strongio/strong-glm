@@ -96,7 +96,7 @@ class SurvivalGlm(Glm):
                 X = preprocessor.transform(dataframe)
             else:
                 X = dataframe.loc[:, preprocessor].values
-            X = to_tensor(X, device=self.device, dtype=self.module_dtype)
+            X = to_tensor(X, device=self.device, dtype=self.module_dtype_)
 
             # km estimate:
             df_km = km_summary(
@@ -115,10 +115,14 @@ class SurvivalGlm(Glm):
             y = df_km.loc[:, ['time']].values
             if self.scale_y:
                 y = self.y_scaler_.transform(y)
-            y = to_tensor(y, device=self.device, dtype=self.module_dtype)
+            y = to_tensor(y, device=self.device, dtype=self.module_dtype_)
 
             # b/c dist-kwargs transposed, broadcasting logic means we get array with dims: (times, dataframe_rows)
             cdf = distribution.cdf(y[:, [0]])
             # this is then reduced, collapsing across dataframe rows, so that we get a mean estimate for this dataset
             df_km['model_estimate'] = 1. - torch.mean(cdf, dim=1)
             return df_km
+
+    def estimate_laplace_params(self, X, y, **fit_params):
+        y = self.y_scaler_.transform(y)
+        return super().estimate_laplace_params(X=X, y=y, **fit_params)

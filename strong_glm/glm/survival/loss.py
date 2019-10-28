@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 from skorch.helper import SliceDict
@@ -12,7 +12,10 @@ class CensNegLogProbLoss(NegLogProbLoss):
     Negative-log-prob when y_true is a right-censored (and possibly left-truncated) output.
     """
 
-    def forward(self, y_pred: Tuple[torch.Tensor, ...], y_true: torch.Tensor) -> torch.Tensor:
+    def forward(self,
+                y_pred: Tuple[torch.Tensor, ...],
+                y_true: torch.Tensor,
+                reduction: Optional[str] = None) -> torch.Tensor:
         # y-true is a tensor with the right shape to be unpacked:
         y_vals, y_cens, y_ltrunc = unpack_cens_y(y_true)
 
@@ -26,7 +29,8 @@ class CensNegLogProbLoss(NegLogProbLoss):
         if y_ltrunc is not None:
             log_probs = log_probs - self._log_surv(y_ltrunc, params)
 
-        return _reductions[self.reduction](-log_probs)
+        reduction = reduction or self.reduction
+        return _reductions[reduction](-log_probs)
 
     def _log_surv(self, x: torch.Tensor, params_slice_dict: SliceDict) -> torch.Tensor:
         # avoid distribution at edge of PDF support, grad can be nan:

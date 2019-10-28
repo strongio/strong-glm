@@ -78,7 +78,12 @@ sklearn_ridge_grid = GridSearchCV(
     cv=5,
     scoring='neg_mean_squared_error'
 )
-sklearn_ridge_grid.cv_df_ = pd.DataFrame(sklearn_ridge_grid.fit(X=data, y=data['y'].values).cv_results_)
+
+# fit:
+sklearn_ridge_grid.fit(X=data, y=data['y'].values)
+
+# get cv results:
+sklearn_ridge_grid.cv_df_ = pd.DataFrame(sklearn_ridge_grid.cv_results_)
 sklearn_ridge_grid.cv_df_['penalty'] =\
     sklearn_ridge_grid.cv_df_.pop('params').apply(lambda p: p ['ridge__alpha'])
 
@@ -108,7 +113,12 @@ strong_ridge_grid = GridSearchCV(
     n_jobs=-1,
     verbose=1
 )
-strong_ridge_grid.cv_df_ = pd.DataFrame(strong_ridge_grid.fit(X=data, y=data['y'].values).cv_results_)
+
+# fit:
+strong_ridge_grid.fit(X=data, y=data['y'].values, glm__input_feature_names=input_feature_names)
+
+# get cv results:
+strong_ridge_grid.cv_df_ = pd.DataFrame(strong_ridge_grid.cv_results_)
 strong_ridge_grid.cv_df_['penalty'] =\
     strong_ridge_grid.cv_df_.pop('params').apply(lambda p: p ['glm__criterion__penalty'])
 # -
@@ -133,6 +143,26 @@ print(
     ggtitle("Performance Comparison") +
     theme_bw() +
     theme(figure_size=(8,4))
+)
+# -
+# ## Visualize Coefficient-Estimates
+
+# +
+preproc = strong_ridge_grid.best_estimator_[0]
+glm = strong_ridge_grid.best_estimator_._final_estimator
+glm.estimate_laplace_params(X=preproc.transform(data), y=data['y'].values)
+df_params = glm.summarize_laplace_params()
+df_params['ground_truth'] = df_params['feature'].map(dict(zip(input_feature_names, true_betas)))
+
+print(
+    ggplot(df_params, aes(x='estimate', y='ground_truth')) +
+    geom_point() +
+    geom_errorbarh(aes(xmin='estimate - std', xmax='estimate + std'), alpha=.50, height=0.0001) +
+    geom_abline() +
+    theme(figure_size=(10,10)) +
+    geom_hline(yintercept=0, linetype='dashed') +
+    theme_bw() +
+    scale_x_continuous(name="Model-Estimate") + scale_y_continuous(name="Ground-Truth")
 )
 # -
 

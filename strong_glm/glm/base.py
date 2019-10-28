@@ -13,6 +13,7 @@ from skorch.utils import to_numpy
 from torch.distributions import Distribution, constraints
 from torch.optim.lbfgs import LBFGS
 
+from strong_glm.hessian import hessian
 from strong_glm.utils import to_tensor
 from strong_glm.glm.utils import MultiOutputModule
 from strong_glm.log_prob_criterion import NegLogProbLoss
@@ -59,17 +60,18 @@ class Glm(NeuralNet):
         self.distribution_param_names = distribution_param_names
 
         self.module_input_feature_names_ = None
+        self.laplace_params_ = None
 
     @property
     def distribution_param_names_(self):
         return list(self.module_.keys())
 
     @property
-    def module_dtype(self) -> torch.dtype:
+    def module_dtype_(self) -> torch.dtype:
         return next(self.module_.parameters()).dtype
 
     def infer(self, x: Union[torch.Tensor, SliceDict], **fit_params):
-        x = to_tensor(x, device=self.device, dtype=self.module_dtype)
+        x = to_tensor(x, device=self.device, dtype=self.module_dtype_)
         return super().infer(x=x, **fit_params)
 
     def predict(self, X: Union[torch.Tensor, SliceDict], type: str = 'mean', *args, **kwargs) -> np.ndarray:
@@ -111,7 +113,7 @@ class Glm(NeuralNet):
         from pandas import DataFrame
 
         # check x, broadcast:
-        x = to_tensor(x, device=self.device, dtype=self.module_dtype)
+        x = to_tensor(x, device=self.device, dtype=self.module_dtype_)
         if len(x.shape) == 2:
             assert x.shape[1] == 1
         elif len(x.shape) == 1:
@@ -122,7 +124,7 @@ class Glm(NeuralNet):
         # generate dist-param predictions:
         assert len(dataframe.index) == len(set(dataframe.index))
         with torch.no_grad():
-            X = to_tensor(preprocessor.transform(dataframe), device=self.device, dtype=self.module_dtype)
+            X = to_tensor(preprocessor.transform(dataframe), device=self.device, dtype=self.module_dtype_)
             params = self.infer(X)
             distribution_kwargs = dict(zip(self.distribution_param_names_, params))
             dist = self.distribution(**distribution_kwargs)
@@ -143,9 +145,11 @@ class Glm(NeuralNet):
                  y_pred: torch.Tensor,
                  y_true: torch.Tensor,
                  X: Optional[torch.Tensor] = None,
-                 training: bool = False):
-        neg_log_lik = super().get_loss(y_pred, y_true)
-        penalty = self.criterion_.get_penalty(y_true=y_true, **dict(self.module_.named_parameters()))
+                 training: bool = False,
+                 **kwargs):
+        y_true = to_tensor(y_true, device=self.device, dtype=self.module_dtype_)
+        neg_log_lik = self.criterion_(y_pred, y_true, **kwargs)
+        penalty = self.criterion_.get_penalty(y_true=y_true, **dict(self.module_.named_parameters()), **kwargs)
         return neg_log_lik + penalty
 
     @property
@@ -166,7 +170,7 @@ class Glm(NeuralNet):
             self.module_input_feature_names_ = self._infer_input_feature_names(X, input_feature_names)
 
         # convert y to the right dtype:
-        y = to_tensor(y, device=self.device, dtype=self.module_dtype)
+        y = to_tensor(y, device=self.device, dtype=self.module_dtype_)
 
         return super().partial_fit(X=X, y=y, classes=classes, **fit_params)
 
@@ -273,6 +277,49 @@ class Glm(NeuralNet):
             ilinks[param] = ilink
         return ilinks
 
+    def estimate_laplace_params(self, X, y, **fit_params):
+        means = torch.cat([param.data.view(-1) for param in self.module_.parameters()])
+
+        # get loss, hessian:
+        y_pred = self.infer(X, **fit_params)
+        y_true = to_tensor(y, device=self.device, dtype=self.module_dtype_)
+        loss = self.get_loss(y_pred, y_true, reduction='sum')
+        hess = hessian(output=loss, inputs=list(self.module_.parameters()), allow_unused=True, progress=False)
+
+        # create mvnorm for laplace approx:
+        try:
+            self.laplace_params_ = torch.distributions.MultivariateNormal(means, torch.inverse(hess))
+        except RuntimeError as e:
+            if 'Lapack' in e.args[0]:
+                warn(f"Hessian was not invertible, model may not have converged. Returning ~0 cov. Hessian:\n{hess}")
+                cov = torch.eye(hess.shape[0]) * 10e-8
+                self.laplace_params_ = torch.distributions.MultivariateNormal(means, cov)
+            else:
+                raise e
+
+    def summarize_laplace_params(self) -> 'DataFrame':
+        if self.laplace_params_ is None:
+            raise RuntimeError("Must run `estimate_laplace_params` first.")
+        from pandas import DataFrame
+
+        if not MultiOutputModule.is_default_submodule(self.module):
+            raise NotImplementedError("Cannot run `summarize_laplace_params` if the default `module` was not used.")
+
+        names = []
+        for param_name, param_tens in self.module_.named_parameters():
+            dist_param, w_or_b = param_name.split(".")
+            if w_or_b == 'bias':
+                names.append((dist_param, 'bias'))
+            else:
+                names.extend((dist_param, x) for x in self.module_input_feature_names_)
+
+        df = DataFrame({
+            'estimate': self.laplace_params_.mean.numpy(),
+            'std': self.laplace_params_.covariance_matrix.diagonal().sqrt().numpy()
+        })
+        df['dist_param'], df['feature'] = zip(*names)
+        return df
+
 
 def identity(x):
     return x
@@ -283,25 +330,3 @@ _constraint_to_ilink = {
     constraints.unit_interval: torch.sigmoid,
     constraints.real: identity
 }
-
-# def laplace_params(self, y_pred, y_true, input_features=None):
-#     input_features = input_features or self.input_features_
-#     means = None  # TODO
-#     if len(means) != len(input_features):
-#         warn("TODO: coherent warning")
-#         feature_names = ["x{}".format(i) for i in range(len(means))]
-#
-#     # get hessian:
-#     loss = self.get_loss(y_pred, y_true)
-#     hess = hessian(output=loss, inputs=list(self.module_.parameters()), allow_unused=True, progress=False)
-#
-#     # create mvnorm for laplace approx:
-#     try:
-#         self._param_estimates = torch.distributions.MultivariateNormal(means, torch.inverse(hess))
-#     except RuntimeError as e:
-#         if 'Lapack' in e.args[0]:
-#             warn(f"Hessian was not invertible, model may not have converged. Returning ~0 cov. Hessian:\n{hess}")
-#             cov = torch.eye(hess.shape[0]) * 10e-8
-#             self._param_estimates = torch.distributions.MultivariateNormal(means, cov)
-#         else:
-#             raise e

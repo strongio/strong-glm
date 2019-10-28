@@ -1,4 +1,4 @@
-from typing import Sequence, Type
+from typing import Sequence, Type, Optional
 
 import torch
 from skorch.helper import SliceDict
@@ -43,18 +43,27 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
         else:
             raise ValueError(f"Expected `penalty` to be something that can be passed to `{penalty_type.__name__}`")
 
-    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-        neg_log_probs = -self.distribution(*y_pred).log_prob(y_true)
-        return _reductions[self.reduction](neg_log_probs)
-
-    def get_penalty(self, y_true: torch.Tensor, **kwargs):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, reduction: Optional[str] = None) -> torch.Tensor:
         """
-        :param y_true: The observed target.
+        :param y_pred: Tuple of predicted parameters.
+        :param y_true: Tensor of the observed target.
+        :param reduction: For overriding self.reduction.
+        :return: The penalty
+        """
+        neg_log_probs = -self.distribution(*y_pred).log_prob(y_true)
+        reduction = reduction or self.reduction
+        return _reductions[reduction](neg_log_probs)
+
+    def get_penalty(self, y_true: torch.Tensor, reduction: Optional[str] = None, **kwargs):
+        """
+        :param y_true: Tensor of the observed target.
+        :param reduction: For overriding self.reduction.
         :param kwargs: The parameters, retrieved via `dict(module.named_parameters())`
         :return: The penalty
         """
         assert isinstance(y_true, (torch.Tensor, SliceDict))
         penalty = self.penalty(**kwargs)
-        if self.reduction == 'mean':
+        reduction = reduction or self.reduction
+        if reduction == 'mean':
             penalty = penalty / len(y_true)
         return penalty

@@ -9,7 +9,7 @@ def hessian(output: torch.Tensor,
             create_graph: bool = False,
             progress: bool = False) -> torch.Tensor:
     """
-    From https://github.com/mariogeiger/hessian
+    Adapted from https://github.com/mariogeiger/hessian
     """
 
     assert output.ndimension() == 0
