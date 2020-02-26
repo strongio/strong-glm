@@ -35,6 +35,6 @@ class CensNegLogProbLoss(NegLogProbLoss):
     def _log_surv(self, x: torch.Tensor, params_slice_dict: SliceDict) -> torch.Tensor:
         # avoid distribution at edge of PDF support, grad can be nan:
         mask = ~torch.isclose(x, torch.zeros(1))
-        cdf = torch.zeros_like(x)
-        cdf[mask] = self.distribution(**params_slice_dict[mask]).cdf(x[mask])
-        return (1.0 - cdf).log()
+        log_surv = torch.zeros_like(x)
+        log_surv[mask] = (1 - self.distribution(**params_slice_dict[mask]).cdf(x[mask])).log()
+        return log_surv
