@@ -12,12 +12,12 @@ from skorch.dataset import CVSplit
 from skorch.helper import SliceDict
 from skorch.utils import to_numpy
 from torch.distributions import Distribution, constraints
-from torch.optim.lbfgs import LBFGS
 
 from strong_glm.hessian import hessian
 from strong_glm.utils import to_tensor
 from strong_glm.glm.utils import MultiOutputModule
 from strong_glm.log_prob_criterion import NegLogProbLoss
+from strong_glm.utils.lbfgs_new import LBFGSNew
 
 
 class Glm(NeuralNet):
@@ -27,7 +27,7 @@ class Glm(NeuralNet):
                  distribution: Type[Distribution],
                  lr: float = .05,
                  module: Optional[Type[torch.nn.Module]] = None,
-                 optimizer: torch.optim.Optimizer = LBFGS,
+                 optimizer: torch.optim.Optimizer = LBFGSNew,
                  distribution_param_names: Optional[Sequence[str]] = None,
                  max_epochs: int = 100,
                  batch_size: int = -1,

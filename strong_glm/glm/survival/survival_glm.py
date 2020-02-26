@@ -2,13 +2,14 @@ from typing import Sequence, Union, Optional, Type
 
 import torch
 from sklearn.compose import ColumnTransformer
+from skorch.utils import TeeGenerator
 from torch.distributions import Distribution
-from torch.optim.lbfgs import LBFGS
 
 from strong_glm.glm.base import Glm
 from strong_glm.glm.survival.censoring import CensScaler, km_summary
 from strong_glm.glm.survival.loss import CensNegLogProbLoss
 from strong_glm.utils import to_tensor
+from strong_glm.utils.lbfgs_new import LBFGSNew
 
 
 class SurvivalGlm(Glm):
@@ -19,7 +20,7 @@ class SurvivalGlm(Glm):
                  scale_y: bool,
                  lr: float = .05,
                  module: Optional[Type[torch.nn.Module]] = None,
-                 optimizer: torch.optim.Optimizer = LBFGS,
+                 optimizer: torch.optim.Optimizer = LBFGSNew,
                  distribution_param_names: Optional[Sequence[str]] = None,
                  **kwargs):
 
@@ -34,6 +35,26 @@ class SurvivalGlm(Glm):
             distribution_param_names=distribution_param_names,
             **kwargs
         )
+
+    def train_step_single(self, Xi, yi, **fit_params):
+        self.module_.train()
+        self.optimizer_.zero_grad()
+        y_pred = self.infer(Xi, **fit_params)
+        loss = self.get_loss(y_pred, yi, X=Xi, training=True)
+        if loss.requires_grad:
+            loss.backward()
+
+            self.notify(
+                'on_grad_computed',
+                named_parameters=TeeGenerator(self.module_.named_parameters()),
+                X=Xi,
+                y=yi
+            )
+
+        return {
+            'loss': loss,
+            'y_pred': y_pred,
+            }
 
     def fit(self, X, y=None, **fit_params):
         # initialize/reset scaler:
