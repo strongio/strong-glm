@@ -34,6 +34,8 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
 
         if isinstance(penalty_type, str):
             penalty_type = self._penalty_aliases[penalty_type]
+        if isinstance(penalty, int):
+            penalty = float(penalty)
         if isinstance(penalty, float):
             self.penalty = penalty_type(penalty)
         elif isinstance(penalty, tuple):

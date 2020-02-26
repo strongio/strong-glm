@@ -66,7 +66,7 @@ class SurvivalGlm(Glm):
                    censor_colname: str,
                    start_time_colname: Optional[str] = None) -> 'DataFrame':
         """
-        :param dataframe: A pandas DataFrame
+        :param dataframe: A pandas DataFrame, or a DataFrameGroupBy (i.e., the result of calling `df.groupby([...])`).
         :param preprocessor: Either a sklearn ColumnTransformer that takes the dataframe and returns X, or a list of
         column-names (such that `X = dataframe.loc[:,preprocessor].values`)
         :param time_colname: The column-name in the dataframe for time-to-event.
