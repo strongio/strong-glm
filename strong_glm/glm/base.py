@@ -4,6 +4,7 @@ from warnings import warn
 import torch
 import numpy as np
 from sklearn.compose import ColumnTransformer
+from sklearn.exceptions import FitFailedWarning
 
 from skorch import NeuralNet
 from skorch.callbacks import Callback, EarlyStopping
@@ -157,12 +158,21 @@ class Glm(NeuralNet):
         sup = list(super()._default_callbacks)
         return sup + [('early_stopping', EarlyStopping(monitor='train_loss', threshold=1e-6))]
 
-    def fit(self, X, y=None, input_feature_names: Optional[Sequence[str]] = None, **fit_params):
+    def fit(self,
+            X: torch.Tensor,
+            y: torch.Tensor = None,
+            input_feature_names: Optional[Sequence[str]] = None,
+            **fit_params):
         # infer number of input features if appropriate:
         if self.module_input_feature_names_ is None:
             self.module_input_feature_names_ = self._infer_input_feature_names(X, input_feature_names)
 
-        return super().fit(X=X, y=y, **fit_params)
+        ret_self = super().fit(X=X, y=y, **fit_params)
+        any_nan_params = any(torch.isnan(param).any() for pname, param in self.module_.named_parameters())
+        if any_nan_params:
+            FitFailedWarning("Fitting resulted in `nan` parameters.")
+
+        return ret_self
 
     def partial_fit(self, X, y=None, classes=None, input_feature_names: Optional[Sequence[str]] = None, **fit_params):
         # infer number of input features if appropriate:
