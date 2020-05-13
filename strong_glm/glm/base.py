@@ -12,13 +12,14 @@ from skorch.dataset import CVSplit
 from skorch.helper import SliceDict
 from skorch.utils import to_numpy
 from torch.distributions import Distribution, constraints
-from torch.optim.lbfgs import LBFGS
+from torch.optim import LBFGS
 
 from strong_glm.hessian import hessian
 from strong_glm.utils import to_tensor
 from strong_glm.glm.utils import MultiOutputModule
 from strong_glm.log_prob_criterion import NegLogProbLoss
 
+import torch
 
 class Glm(NeuralNet):
     criterion_cls = NegLogProbLoss
@@ -33,6 +34,7 @@ class Glm(NeuralNet):
                  batch_size: int = -1,
                  train_split: Optional[CVSplit] = None,
                  callbacks: Optional[Sequence[Callback]] = None,
+                 criterion: Optional['Criterion'] = None,
                  **kwargs):
         """
         :param distribution: A torch.distributions.Distribution, generally one with positive support.
@@ -43,9 +45,6 @@ class Glm(NeuralNet):
         :param kwargs: Further keyword arguments that will be passed to skorch.NeuralNet
         """
 
-        if 'criterion' not in kwargs:
-            kwargs['criterion'] = self.criterion_cls
-
         super().__init__(
             lr=lr,
             module=module,
@@ -54,6 +53,7 @@ class Glm(NeuralNet):
             batch_size=batch_size,
             train_split=train_split,
             callbacks=callbacks,
+            criterion=criterion,
             **kwargs
         )
 
@@ -62,6 +62,13 @@ class Glm(NeuralNet):
 
         self.module_input_feature_names_ = None
         self.laplace_params_ = None
+
+    def _get_params_for_optimizer(self, prefix, named_parameters):
+        args, kwargs = super()._get_params_for_optimizer(prefix=prefix, named_parameters=named_parameters)
+        if issubclass(self.optimizer, LBFGS) or isinstance(self.optimizer, LBFGS):
+            if 'line_search_fn' not in kwargs:
+                kwargs['line_search_fn'] = 'strong_wolfe'
+        return args, kwargs
 
     @property
     def distribution_param_names_(self):
@@ -185,6 +192,8 @@ class Glm(NeuralNet):
         return super().partial_fit(X=X, y=y, classes=classes, **fit_params)
 
     def initialize_criterion(self):
+        if self.criterion is None:
+            self.criterion = self.criterion_cls
         if getattr(self, 'module_', None) is None:
             # defer because we use the initialized module to get `self.distribution_param_names_`. Instead,
             # initialize_criterion will be called at the end of `initialize_module`.

@@ -3,9 +3,8 @@ from typing import Sequence, Union, Optional, Type
 import torch
 from sklearn.compose import ColumnTransformer
 from torch.distributions import Distribution
-from torch.optim.lbfgs import LBFGS
 
-from strong_glm.glm.base import Glm
+from strong_glm.glm.base import Glm, LBFGS
 from strong_glm.glm.survival.censoring import CensScaler, km_summary
 from strong_glm.glm.survival.loss import CensNegLogProbLoss
 from strong_glm.utils import to_tensor
