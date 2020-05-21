@@ -96,7 +96,6 @@ from torch.distributions import Weibull
 
 model_no_ceiling = SurvivalGlm(
     distribution=Weibull, 
-    lr=.10,
     scale_y=True
 )
 model_no_ceiling.fit(X=preproc.transform(data), 
@@ -108,7 +107,6 @@ from strong_glm.distributions import CeilingWeibull
 
 model_ceiling = SurvivalGlm(
     distribution=CeilingWeibull, 
-    lr=.10,
     scale_y=True
 )
 model_ceiling.fit(X=preproc.transform(data), 

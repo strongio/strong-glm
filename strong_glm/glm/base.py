@@ -107,6 +107,11 @@ class Glm(NeuralNet):
         y_out = np.concatenate(y_out, 0)
         return y_out
 
+    def predict_distribution(self, X: Union[torch.Tensor, SliceDict]) -> Distribution:
+        params = self.infer(X)
+        distribution_kwargs = dict(zip(self.distribution_param_names_, params))
+        return self.distribution(**distribution_kwargs)
+
     def predict_proba(self, X: Union[torch.Tensor, SliceDict]):
         """
         Return the predicted probabilities, if applicable for this distribution (e.g. Binomial, Categorical).
