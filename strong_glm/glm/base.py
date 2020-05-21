@@ -21,14 +21,16 @@ from strong_glm.log_prob_criterion import NegLogProbLoss
 
 import torch
 
+
 class Glm(NeuralNet):
     criterion_cls = NegLogProbLoss
 
     def __init__(self,
                  distribution: Type[Distribution],
-                 lr: float = .05,
+                 lr: float = .25,
                  module: Optional[Type[torch.nn.Module]] = None,
                  optimizer: torch.optim.Optimizer = LBFGS,
+                 early_stopping: Union[bool, tuple] = True,
                  distribution_param_names: Optional[Sequence[str]] = None,
                  max_epochs: int = 100,
                  batch_size: int = -1,
@@ -62,6 +64,7 @@ class Glm(NeuralNet):
 
         self.module_input_feature_names_ = None
         self.laplace_params_ = None
+        self.early_stopping = early_stopping
 
     def _get_params_for_optimizer(self, prefix, named_parameters):
         args, kwargs = super()._get_params_for_optimizer(prefix=prefix, named_parameters=named_parameters)
@@ -162,8 +165,11 @@ class Glm(NeuralNet):
 
     @property
     def _default_callbacks(self):
-        sup = list(super()._default_callbacks)
-        return sup + [('early_stopping', EarlyStopping(monitor='train_loss', threshold=1e-6))]
+        cbs = list(super()._default_callbacks)
+        if self.early_stopping:
+            threshold, patience = (1e-5, 3) if self.early_stopping is True else self.early_stopping
+            cbs += [('early_stopping', EarlyStopping(monitor='train_loss', threshold=threshold, patience=patience))]
+        return cbs
 
     def fit(self,
             X: torch.Tensor,
