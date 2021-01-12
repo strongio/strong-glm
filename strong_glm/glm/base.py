@@ -38,7 +38,7 @@ class Glm(NeuralNet):
                  lr: float = .25,
                  module: Optional[Type[torch.nn.Module]] = None,
                  optimizer: torch.optim.Optimizer = LBFGS,
-                 early_stopping: Union[bool, tuple] = True,
+                 early_stopping: tuple = (1e-5, 3),
                  distribution_param_names: Optional[Sequence[str]] = None,
                  max_epochs: int = 100,
                  batch_size: int = -1,
@@ -183,7 +183,7 @@ class Glm(NeuralNet):
     def _default_callbacks(self):
         cbs = list(super()._default_callbacks)
         if self.early_stopping:
-            threshold, patience = (1e-5, 3) if self.early_stopping is True else self.early_stopping
+            threshold, patience = self.early_stopping
             cbs += [('early_stopping', EarlyStopping(monitor='train_loss', threshold=threshold, patience=patience))]
         return cbs
 
@@ -359,10 +359,15 @@ class Glm(NeuralNet):
         names = []
         for param_name, param_tens in self.module_.named_parameters():
             dist_param, w_or_b = param_name.split(".")
+            if not param_tens.numel():
+                continue
             if w_or_b == 'bias':
                 names.append((dist_param, 'bias'))
             else:
-                names.extend((dist_param, x) for x in self.module_input_feature_names_)
+                if isinstance(self.module_input_feature_names_, dict):
+                    names.extend((dist_param, x) for x in self.module_input_feature_names_[dist_param])
+                else:
+                    names.extend((dist_param, x) for x in self.module_input_feature_names_)
 
         df = DataFrame({
             'estimate': self.laplace_params_.mean.numpy(),
