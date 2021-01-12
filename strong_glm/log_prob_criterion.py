@@ -45,7 +45,12 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
         :param reduction: For overriding self.reduction.
         :return: The penalty
         """
-        distribution_kwargs = dict(zip(self.param_names, y_pred))
+        distribution_kwargs = {}
+        for p_name, p_pred in zip(self.param_names, y_pred):
+            if len(p_pred.shape) == 1 and len(y_true.shape) == 2:
+                p_pred = p_pred.unsqueeze(-1)
+            assert y_true.shape == p_pred.shape
+            distribution_kwargs[p_name] = p_pred
         neg_log_probs = -self.distribution(**distribution_kwargs).log_prob(y_true)
         reduction = reduction or self.reduction
         return _reductions[reduction](neg_log_probs)
