@@ -1,7 +1,6 @@
-from typing import Type, Optional, Sequence, Callable, Union, Dict
+from typing import Type, Optional, Sequence, Callable, Union, Dict, Tuple, Iterator
 from warnings import warn
 
-import torch
 import numpy as np
 from sklearn.compose import ColumnTransformer
 from sklearn.exceptions import FitFailedWarning
@@ -20,6 +19,27 @@ from strong_glm.glm.utils import MultiOutputModule
 from strong_glm.log_prob_criterion import NegLogProbLoss
 
 import torch
+
+
+class _NoBatchDataset:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        if kwargs:
+            warn(f"Unexpected kwargs {set(kwargs)}")
+
+    def __len__(self):
+        return 1
+
+
+class _PassThruDataLoader:
+    def __init__(self, dataset: _NoBatchDataset, batch_size: int = 1, **kwargs):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        if kwargs:
+            warn(f"Unexpected kwargs {set(kwargs)}")
+
+    def __iter__(self) -> Iterator[Tuple]:
+        yield self.dataset.args
 
 
 class Glm(NeuralNet):
@@ -45,6 +65,9 @@ class Glm(NeuralNet):
                  train_split: Optional[CVSplit] = None,
                  callbacks: Optional[Sequence[Callback]] = None,
                  criterion: Optional['Criterion'] = None,
+                 iterator_train: 'DataLoader' = _PassThruDataLoader,
+                 iterator_valid: 'DataLoader' = None,
+                 dataset: 'Dataset' = _NoBatchDataset,
                  **kwargs):
         """
         :param distribution: A torch.distributions.Distribution class.
@@ -64,6 +87,9 @@ class Glm(NeuralNet):
             train_split=train_split,
             callbacks=callbacks,
             criterion=criterion,
+            iterator_train=iterator_train,
+            iterator_valid=iterator_valid,
+            dataset=dataset,
             **kwargs
         )
         assert isinstance(distribution, type)
