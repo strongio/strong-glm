@@ -11,7 +11,7 @@ from skorch.callbacks import Callback, EarlyStopping
 from skorch.dataset import CVSplit
 from skorch.helper import SliceDict
 from skorch.utils import to_numpy
-from torch.distributions import Distribution, constraints
+from torch.distributions import Distribution, constraints, NegativeBinomial
 from torch.optim import LBFGS
 
 from strong_glm.hessian import hessian
@@ -23,6 +23,14 @@ import torch
 
 
 class Glm(NeuralNet):
+    """Glm base class
+
+    For fitting generalized linear models using a sklearn-style interface:
+
+    ```
+    glm = Glm(distribution=NegativeBinomial)
+    ```
+    """
     criterion_cls = NegLogProbLoss
 
     def __init__(self,
@@ -39,7 +47,7 @@ class Glm(NeuralNet):
                  criterion: Optional['Criterion'] = None,
                  **kwargs):
         """
-        :param distribution: A torch.distributions.Distribution, generally one with positive support.
+        :param distribution: A torch.distributions.Distribution class.
         :param lr: Shortcut for optimizer__lr
         :param module: A torch.nn.Module. Instances will be created as sub-modules of MultiOutputModule.
         :param optimizer: The optimizer, default is LBFGS
@@ -58,7 +66,7 @@ class Glm(NeuralNet):
             criterion=criterion,
             **kwargs
         )
-
+        assert isinstance(distribution, type)
         self.distribution = distribution
         self.distribution_param_names = distribution_param_names
 
@@ -68,10 +76,13 @@ class Glm(NeuralNet):
 
     def _get_params_for_optimizer(self, prefix, named_parameters):
         args, kwargs = super()._get_params_for_optimizer(prefix=prefix, named_parameters=named_parameters)
-        if issubclass(self.optimizer, LBFGS) or isinstance(self.optimizer, LBFGS):
-            if 'line_search_fn' not in kwargs:
-                kwargs['line_search_fn'] = 'strong_wolfe'
+        # if issubclass(self.optimizer, LBFGS) or isinstance(self.optimizer, LBFGS):
+        #     if 'line_search_fn' not in kwargs:
+        #         kwargs['line_search_fn'] = 'strong_wolfe'
         return args, kwargs
+
+    def initialize_optimizer(self, triggered_directly=True):
+        super().initialize_optimizer()
 
     @property
     def distribution_param_names_(self):
@@ -165,7 +176,7 @@ class Glm(NeuralNet):
                  **kwargs):
         y_true = to_tensor(y_true, device=self.device, dtype=self.module_dtype_)
         neg_log_lik = self.criterion_(y_pred, y_true, **kwargs)
-        penalty = self.criterion_.get_penalty(y_true=y_true, **dict(self.module_.named_parameters()), **kwargs)
+        penalty = self.criterion_.get_penalty(y_true=y_true, module=self.module_)
         return neg_log_lik + penalty
 
     @property
@@ -181,6 +192,13 @@ class Glm(NeuralNet):
             y: torch.Tensor = None,
             input_feature_names: Optional[Sequence[str]] = None,
             **fit_params):
+        """
+        :param X: A model-matrix of predictors (should not include a constant term).
+        :param y: A vector of outcomes.
+        :param input_feature_names: The column-names of X.
+        :param fit_params: Other kwargs passed to super
+        :return: This instance
+        """
         # infer number of input features if appropriate:
         if self.module_input_feature_names_ is None:
             self.module_input_feature_names_ = self._infer_input_feature_names(X, input_feature_names)
@@ -268,6 +286,8 @@ class Glm(NeuralNet):
         if not kwargs.get('names'):
             if self.distribution_param_names:
                 kwargs['names'] = self.distribution_param_names
+            elif self.distribution in _distribution_to_param_names:
+                kwargs['names'] = _distribution_to_param_names[self.distribution]
             else:
                 try:
                     kwargs['names'] = list(self.distribution.arg_constraints.keys())
@@ -297,8 +317,9 @@ class Glm(NeuralNet):
         ilinks = {}
         for param in param_names:
             constraint = getattr(self.distribution, 'arg_constraints', {}).get(param, None)
-            ilink = _constraint_to_ilink.get(constraint, None)
+            ilink = _constraint_to_ilink.get(_constraint_hash(constraint), None)
             if ilink is None:
+                # TODO: let the user override
                 ilink = identity
                 warn(
                     "distribution.arg_constraints[{}] returned {}; unsure of proper inverse-link. Will use identity.".
@@ -355,8 +376,26 @@ def identity(x):
     return x
 
 
+def _constraint_hash(constraint: constraints.Constraint) -> int:
+    assert isinstance(constraint, constraints.Constraint)
+    out = hash(type(constraint))
+    out ^= hash(frozenset(constraint.__dict__.items()))
+    return out
+
+
+# useful if the distribution's init has multiple ways of specifying (e.g. both logits or probs)
+_distribution_to_param_names = {
+    NegativeBinomial: ['probs', 'total_count']
+}
+
+# torch.distributions has a whole 'transforms' module but I don't know if they provide a mapping
 _constraint_to_ilink = {
-    constraints.positive: torch.exp,
-    constraints.unit_interval: torch.sigmoid,
-    constraints.real: identity
+    _constraint_hash(constraints.positive): torch.exp,
+    _constraint_hash(constraints.greater_than(0)): torch.exp,
+    _constraint_hash(constraints.unit_interval): torch.sigmoid,
+    _constraint_hash(constraints.real): identity,
+    # TODO: is there a way to make these work?
+    _constraint_hash(constraints.greater_than_eq(0)): torch.exp,
+    _constraint_hash(constraints.half_open_interval(0, 1)): torch.sigmoid,
+    # TODO: constraints.interval
 }

@@ -9,6 +9,8 @@ from strong_glm.glm.survival.censoring import CensScaler, km_summary
 from strong_glm.glm.survival.loss import CensNegLogProbLoss
 from strong_glm.utils import to_tensor
 
+import numpy as np
+
 
 class SurvivalGlm(Glm):
     criterion_cls = CensNegLogProbLoss
@@ -106,8 +108,8 @@ class SurvivalGlm(Glm):
 
             # generate predicted params, transpose as inputs to distribution:
             with torch.no_grad():
-                y_trues = self.infer(X)
-                kwargs = {k: y_true[None, :] for k, y_true in zip(self.distribution_param_names_, y_trues)}
+                y_preds = self.infer(X)
+                kwargs = {k: y_true[None, :] for k, y_true in zip(self.distribution_param_names_, y_preds)}
                 distribution = self.distribution(**kwargs)
 
             # get unique times in distribution-friendly format:
@@ -117,9 +119,17 @@ class SurvivalGlm(Glm):
             y = to_tensor(y, device=self.device, dtype=self.module_dtype_)
 
             # b/c dist-kwargs transposed, broadcasting logic means we get array with dims: (times, dataframe_rows)
-            cdf = distribution.cdf(y[:, [0]])
+            observed = y[:, [0]]
+            surv = 1. - distribution.cdf(observed)
+            if start_time_colname:
+                # TODO: either figure out if taking the average is valid, or emit a warning
+                min_ltrunc = np.full_like(observed, fill_value=dataframe[start_time_colname].min())
+                if self.scale_y:
+                    min_ltrunc = self.y_scaler_.transform(min_ltrunc)
+                min_ltrunc = to_tensor(min_ltrunc, device=self.device, dtype=self.module_dtype_)
+                surv /= (1. - distribution.cdf(min_ltrunc))
             # this is then reduced, collapsing across dataframe rows, so that we get a mean estimate for this dataset
-            df_km['model_estimate'] = 1. - torch.mean(cdf, dim=1)
+            df_km['model_estimate'] = torch.mean(surv, dim=1)
             return df_km
 
     def estimate_laplace_params(self, X, y, **fit_params):

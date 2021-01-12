@@ -36,14 +36,7 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
             penalty_type = self._penalty_aliases[penalty_type]
         if isinstance(penalty, int):
             penalty = float(penalty)
-        if isinstance(penalty, float):
-            self.penalty = penalty_type(penalty)
-        elif isinstance(penalty, tuple):
-            self.penalty = penalty_type(*penalty)
-        elif isinstance(penalty, dict):
-            self.penalty = penalty_type(**penalty)
-        else:
-            raise ValueError(f"Expected `penalty` to be something that can be passed to `{penalty_type.__name__}`")
+        self.penalty = penalty_type(penalty)
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, reduction: Optional[str] = None) -> torch.Tensor:
         """
@@ -57,7 +50,7 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
         reduction = reduction or self.reduction
         return _reductions[reduction](neg_log_probs)
 
-    def get_penalty(self, y_true: torch.Tensor, reduction: Optional[str] = None, **kwargs):
+    def get_penalty(self, y_true: torch.Tensor, module, reduction: Optional[str] = None):
         """
         :param y_true: Tensor of the observed target.
         :param reduction: For overriding self.reduction.
@@ -65,7 +58,7 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
         :return: The penalty
         """
         assert isinstance(y_true, (torch.Tensor, SliceDict))
-        penalty = self.penalty(**kwargs)
+        penalty = self.penalty(module)
         reduction = reduction or self.reduction
         if reduction == 'mean':
             penalty = penalty / len(y_true)
