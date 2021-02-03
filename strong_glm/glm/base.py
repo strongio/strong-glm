@@ -342,13 +342,21 @@ class Glm(NeuralNet):
     def _infer_ilinks(self, param_names: Sequence[str]) -> Dict[str, Callable]:
         ilinks = {}
         for param in param_names:
-            constraint = getattr(self.distribution, 'arg_constraints', {}).get(param, None)
+            try:
+                constraint = self.distribution.arg_constraints[param]
+            except AttributeError:
+                raise RuntimeError(f"`{self.distribution}` doesn't have an arg-constraints attribute; this is needed.")
+            except KeyError:
+                raise RuntimeError(
+                    f"`{self.distribution}.arg_constraints` doesn't have param {param};"
+                    f"\n{self.distribution.arg_constraints}"
+                )
             ilink = _constraint_to_ilink.get(_constraint_hash(constraint), None)
             if ilink is None:
                 # TODO: let the user override
                 ilink = identity
                 warn(
-                    "distribution.arg_constraints[{}] returned {}; unsure of proper inverse-link. Will use identity.".
+                    "distribution.arg_constraints['{}'] returned {}; unsure of proper inverse-link. Will use identity.".
                         format(param, constraint)
                 )
             ilinks[param] = ilink
