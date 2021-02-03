@@ -348,7 +348,7 @@ class Glm(NeuralNet):
                 raise RuntimeError(f"`{self.distribution}` doesn't have an arg-constraints attribute; this is needed.")
             except KeyError:
                 raise RuntimeError(
-                    f"`{self.distribution}.arg_constraints` doesn't have param {param};"
+                    f"`{self.distribution.__name__}.arg_constraints` doesn't have param {param};"
                     f"\n{self.distribution.arg_constraints}"
                 )
             ilink = _constraint_to_ilink.get(_constraint_hash(constraint), None)
