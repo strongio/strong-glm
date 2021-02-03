@@ -52,6 +52,9 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
             assert y_true.shape == p_pred.shape
             distribution_kwargs[p_name] = p_pred
         neg_log_probs = -self.distribution(**distribution_kwargs).log_prob(y_true)
+        if torch.isnan(neg_log_probs).any() and torch.isnan(y_true).any():
+            raise ValueError("`nans` in `y_true`")
+
         reduction = reduction or self.reduction
         return _reductions[reduction](neg_log_probs)
 
