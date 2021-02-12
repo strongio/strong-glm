@@ -373,12 +373,14 @@ class Glm(NeuralNet):
 
         # create mvnorm for laplace approx:
         try:
-            self.laplace_params_ = torch.distributions.MultivariateNormal(means, torch.inverse(hess))
+            self.laplace_params_ = torch.distributions.MultivariateNormal(means, covariance_matrix=torch.inverse(hess))
+            self.converged_ = True
         except RuntimeError as e:
-            if 'Lapack' in e.args[0]:
-                warn(f"Hessian was not invertible, model may not have converged. Returning ~0 cov. Hessian:\n{hess}")
-                cov = torch.eye(hess.shape[0]) * 10e-8
-                self.laplace_params_ = torch.distributions.MultivariateNormal(means, cov)
+            if 'lapack' in str(e) or 'cholesky' in str(e):
+                warn("Model failed to converge; `laplace_params` cannot be estimated")
+                fake_cov = (2 * means.abs().max() * torch.eye(len(hess))) ** 2
+                self.laplace_params_ = torch.distributions.MultivariateNormal(means, covariance_matrix=fake_cov)
+                self.converged_ = False
             else:
                 raise e
 
