@@ -126,6 +126,7 @@ class Glm(NeuralNet):
         """
         Return an attribute of the distribution (by default the mean) as a numpy array.
         """
+        X = to_tensor(X, device=self.device, dtype=self.module_dtype_)
         y_out = []
         for params in self.forward_iter(X, training=False):
             batch_size = len(params[0])
