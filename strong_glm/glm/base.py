@@ -66,7 +66,7 @@ class Glm(NeuralNet):
                  callbacks: Optional[Sequence[Callback]] = None,
                  criterion: Optional['Criterion'] = None,
                  iterator_train: 'DataLoader' = _PassThruDataLoader,
-                 iterator_valid: 'DataLoader' = None,
+                 iterator_valid: 'DataLoader' = _PassThruDataLoader,
                  dataset: 'Dataset' = _NoBatchDataset,
                  **kwargs):
         """
