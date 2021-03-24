@@ -23,4 +23,5 @@ def to_tensor(X: Union[torch.Tensor, SliceDict],
 
     if dtype is not None:
         tensor = tensor.to(dtype)
+
     return tensor

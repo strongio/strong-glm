@@ -10,9 +10,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         'numpy>=1.17.2',
-        'scikit-learn>=0.21.3',
         "scipy>=1.3.1",
-        "skorch==0.6.*",
-        "torch>=1.2.0"
+        "skorch>=0.9.0",
+        "torch>=1.6.0"
     ]
 )
