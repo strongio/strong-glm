@@ -203,7 +203,7 @@ class Glm(NeuralNet):
                  **kwargs):
         y_true = to_tensor(y_true, device=self.device, dtype=self.module_dtype_)
         neg_log_lik = self.criterion_(y_pred, y_true, **kwargs)
-        penalty = self.criterion_.get_penalty(y_true=y_true, module=self.module_)
+        penalty = self.criterion_.get_penalty(y_true=y_true, module=self.module_, reduction=kwargs.get('reduction'))
         return neg_log_lik + penalty
 
     @property
