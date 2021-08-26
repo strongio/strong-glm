@@ -84,7 +84,7 @@ class MultiOutputModule(torch.nn.ModuleDict):
             sub_y_pred = self.inv_links[nm](sub_module(sub_input))
             y_pred.append(self._validate_pred_shape(sub_y_pred, nm))
 
-        return tuple(broadcast_all(*y_pred))
+        return tuple(y_pred)
 
     def _validate_input(self, *args, **kwargs):
         if args:
@@ -104,9 +104,9 @@ class MultiOutputModule(torch.nn.ModuleDict):
 
     @staticmethod
     def _validate_pred_shape(x: torch.Tensor, nm: str):
-        if len(x.shape) == 2:
+        if len(x.shape) == 1:
             # TODO: is this nonstandard?
-            x = x.squeeze(-1)
-        if len(x.shape) > 1:
-            raise RuntimeError(f"The output for `{nm}` has invalid shape {x.shape}, expected 1D.")
+            x = x.unsqueeze(-1)
+        if len(x.shape) != 2:
+            raise RuntimeError(f"The output for `{nm}` has invalid shape {x.shape}, expected 2D.")
         return x

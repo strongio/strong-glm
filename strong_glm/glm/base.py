@@ -1,6 +1,8 @@
 from typing import Type, Optional, Sequence, Callable, Union, Dict, Tuple, Iterator
 from warnings import warn
 
+from functools import cached_property
+
 import numpy as np
 from sklearn.compose import ColumnTransformer
 from sklearn.exceptions import FitFailedWarning
@@ -363,8 +365,34 @@ class Glm(NeuralNet):
             ilinks[param] = ilink
         return ilinks
 
-    def estimate_laplace_params(self, X, y, **fit_params):
-        means = torch.cat([param.data.view(-1) for param in self.module_.parameters()])
+    def estimate_laplace_params(self, X, y, namer: Optional[Callable] = None, **fit_params):
+        if namer is None:
+            def namer(pname, tens):
+                dist_param, w_or_b = pname.split(".")
+                if not tens.numel():
+                    return []
+                if w_or_b == 'bias':
+                    return [{'dist_param': dist_param, 'feature': 'bias'}]
+                else:
+                    if isinstance(self.module_input_feature_names_, dict):
+                        return [
+                            {'dist_param': dist_param, 'feature': x} for x in
+                            self.module_input_feature_names_[dist_param]
+                        ]
+                    else:
+                        return [{'dist_param': dist_param, 'feature': x} for x in self.module_input_feature_names_]
+
+        self.laplace_params_labels_ = []
+        means = []
+        for param_name, param in self.module_.named_parameters():
+            if not param.requires_grad:
+                print(f"skipping {param_name}, doesn't require grad")
+            means.append(param.detach().view(-1))
+            names = namer(param_name, param)
+            if len(names) != param.numel() or (len(names) > 0 and not isinstance(names[0], dict)):
+                raise ValueError(f"Expected the `namer` function to return list of dicts w/len=={param_name}.numel()")
+            self.laplace_params_labels_.extend(names)
+        means = torch.cat(means)
 
         # get loss, hessian:
         y_pred = self.infer(X, **fit_params)
@@ -382,6 +410,7 @@ class Glm(NeuralNet):
                 fake_cov = (2 * means.abs().max() * torch.eye(len(hess))) ** 2
                 self.laplace_params_ = torch.distributions.MultivariateNormal(means, covariance_matrix=fake_cov)
                 self.converged_ = False
+                self.failed_hess = hess
             else:
                 raise e
 
@@ -390,27 +419,10 @@ class Glm(NeuralNet):
             raise RuntimeError("Must run `estimate_laplace_params` first.")
         from pandas import DataFrame
 
-        if not MultiOutputModule.is_default_submodule(self.module):
-            raise NotImplementedError("Cannot run `summarize_laplace_params` if the default `module` was not used.")
+        df = DataFrame(self.laplace_params_labels_). \
+            assign(estimate=self.laplace_params_.mean.numpy(),
+                   std=self.laplace_params_.covariance_matrix.diagonal().sqrt().numpy())
 
-        names = []
-        for param_name, param_tens in self.module_.named_parameters():
-            dist_param, w_or_b = param_name.split(".")
-            if not param_tens.numel():
-                continue
-            if w_or_b == 'bias':
-                names.append((dist_param, 'bias'))
-            else:
-                if isinstance(self.module_input_feature_names_, dict):
-                    names.extend((dist_param, x) for x in self.module_input_feature_names_[dist_param])
-                else:
-                    names.extend((dist_param, x) for x in self.module_input_feature_names_)
-
-        df = DataFrame({
-            'estimate': self.laplace_params_.mean.numpy(),
-            'std': self.laplace_params_.covariance_matrix.diagonal().sqrt().numpy()
-        })
-        df['dist_param'], df['feature'] = zip(*names)
         return df
 
 

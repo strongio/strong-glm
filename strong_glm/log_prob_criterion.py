@@ -45,15 +45,22 @@ class NegLogProbLoss(torch.nn.modules.loss._Loss):
         :param reduction: For overriding self.reduction.
         :return: The penalty
         """
-        distribution_kwargs = {}
+
+        distribution_kwargs = SliceDict()
         for p_name, p_pred in zip(self.param_names, y_pred):
             if len(p_pred.shape) == 1 and len(y_true.shape) == 2:
+                assert y_true.shape[-1] == 1
                 p_pred = p_pred.unsqueeze(-1)
+            if len(p_pred.shape) == 2 and len(y_true.shape) == 1:
+                assert p_pred.shape[-1] == 1
+                y_true = y_true.unsqueeze(-1)
+
             assert y_true.shape == p_pred.shape
             distribution_kwargs[p_name] = p_pred
-        neg_log_probs = -self.distribution(**distribution_kwargs).log_prob(y_true)
-        if torch.isnan(neg_log_probs).any() and torch.isnan(y_true).any():
-            raise ValueError("`nans` in `y_true`")
+        valid = ~torch.isnan(y_true)
+        neg_log_probs = -self.distribution(**distribution_kwargs[valid]).log_prob(y_true[valid])
+        if not valid.all():
+            pass  # TODO: warn?
 
         reduction = reduction or self.reduction
         return _reductions[reduction](neg_log_probs)

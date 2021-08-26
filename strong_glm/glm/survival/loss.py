@@ -18,6 +18,8 @@ class CensNegLogProbLoss(NegLogProbLoss):
                 reduction: Optional[str] = None) -> torch.Tensor:
         # y-true is a tensor with the right shape to be unpacked:
         y_vals, y_cens, y_ltrunc = unpack_cens_y(y_true)
+        for i in range(len(y_pred)):
+            assert y_pred[i].shape == y_vals.shape
 
         # y-pred is a tuple that corresponds to param_names:
         params = SliceDict(**dict(zip(self.param_names, y_pred)))
@@ -30,7 +32,8 @@ class CensNegLogProbLoss(NegLogProbLoss):
             log_probs = log_probs - self._log_surv(y_ltrunc, params)
 
         reduction = reduction or self.reduction
-        return _reductions[reduction](-log_probs)
+        out = _reductions[reduction](-log_probs)
+        return out
 
     def _log_surv(self, x: torch.Tensor, params_slice_dict: SliceDict) -> torch.Tensor:
         # avoid distribution at edge of PDF support, grad can be nan:

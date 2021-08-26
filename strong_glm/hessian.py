@@ -30,8 +30,6 @@ def hessian(output: torch.Tensor,
 
     ai = 0
     for i, inp in enumerate(inputs):
-        if not inp.requires_grad:
-            continue
         [grad] = torch.autograd.grad(output, inp, create_graph=True, allow_unused=allow_unused)
         grad = torch.zeros_like(inp) if grad is None else grad
         grad = grad.contiguous().view(-1)

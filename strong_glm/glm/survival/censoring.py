@@ -28,18 +28,18 @@ def cens_y_to_indicator(time: np.ndarray, is_upper_cens: np.ndarray, window: flo
 
 
 def unpack_cens_y(y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    assert len(y.shape) == 2
-    if y.shape[1] <= 1:
+    assert len(y.shape) > 1
+    if y.shape[-1] <= 1:
         raise ValueError(
             "Expected `y` to have at least two columns: the first with values the second with censoring indicators."
         )
     else:
-        y_cens = y[:, 1]
-        if not ((y_cens == 0.) | (y_cens == 1.)).all():
-            raise ValueError("The second column of `y` should be a censoring indicator, with only 0s and 1s")
-        y_vals = y[:, 0]
-        if y.shape[1] == 3:
-            y_ltrunc = y[:, 2]
+        y_cens = y[..., [1]]
+        # if not ((y_cens == 0.) | (y_cens == 1.)).all():
+        #     raise ValueError("The second column of `y` should be a censoring indicator, with only 0s and 1s")
+        y_vals = y[..., [0]]
+        if y.shape[-1] == 3:
+            y_ltrunc = y[..., [2]]
         else:
             y_ltrunc = torch.zeros_like(y_vals)
     return y_vals, y_cens, y_ltrunc
