@@ -63,12 +63,13 @@ data['censored'] = data['_tte_true'] > data['tte']
 data.head()
 # -
 
+df_ex = data.loc[data['customer_id'].isin(data['customer_id'].sample(100)),:]
 print(
-    ggplot(data.query("customer_id.isin(customer_id.sample(100))"), aes(color='censored')) + 
+    ggplot(df_ex, aes(color='censored')) + 
       geom_segment(aes(x='start_time', xend='start_time+tte', 
-                       y='factor(customer_id)', yend='factor(customer_id)')) +
+                       y='customer_id.astype("str")', yend='customer_id.astype("str")')) +
       coord_cartesian(xlim=(0,365)) +
-    scale_x_continuous(name='') + scale_y_discrete(name="Customer", breaks=None) +
+    scale_x_continuous(name='') + scale_y_discrete(name="Customer") +
     theme_bw() +
     scale_color_manual(values=("blue", "gray")) +
     geom_vline(xintercept=365, linetype='dashed') +

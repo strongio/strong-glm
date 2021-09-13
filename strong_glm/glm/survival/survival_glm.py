@@ -109,7 +109,7 @@ class SurvivalGlm(Glm):
             # generate predicted params, transpose as inputs to distribution:
             with torch.no_grad():
                 y_preds = self.infer(X)
-                kwargs = {k: y_true[None, :] for k, y_true in zip(self.distribution_param_names_, y_preds)}
+                kwargs = {k: y_pred.t() for k, y_pred in zip(self.distribution_param_names_, y_preds)}
                 distribution = self.distribution(**kwargs)
 
             # get unique times in distribution-friendly format:
